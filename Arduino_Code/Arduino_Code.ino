@@ -11,8 +11,14 @@ float currentElbow = 90;
 unsigned long lastUpdate = 0;
 const int updateInterval = 15; 
 
-float speedMultiplier = 1.5;  
+float speedMultiplier = 1.0;  
 const float baseStepSize = 2.0;  
+
+const int triggerThreshold = 0.99; 
+
+bool leftTriggerHeld = false;
+bool rightTriggerHeld = false;
+
 
 void setup() {
   Serial.begin(9600);
@@ -25,7 +31,6 @@ void loop() {
   static float targetBase = 90;
   static float targetShoulder = 90;
   static float targetElbow = 90;
-  float speedMultiplier = 1.0;  
 
   if (Serial.available()) {
     String packet = Serial.readStringUntil('\n');
@@ -39,34 +44,41 @@ void loop() {
       start = commaIndex + 1;
     }
 
-    // Button logic for speed
-    bool L1 = (int)values[10] == 1;
-    bool R1 = (int)values[11] == 1;
+    // Read triggers from values[]
+    float leftTriggerValue = values[5];
+    float rightTriggerValue = values[4];
 
-    if (L1) speedMultiplier = 1.5;
-    else if (R1) speedMultiplier = 0.25;
-    else speedMultiplier = 1.0;
+    leftTriggerHeld = (leftTriggerValue > triggerThreshold);
+    rightTriggerHeld = (rightTriggerValue > triggerThreshold);
+    bool baseHold = leftTriggerHeld && rightTriggerHeld;
 
-    // Base, shoulder, elbow control
-    float baseInput = values[5] - values[4];
-    targetBase = constrain(map(baseInput * 100, -100, 100, 0, 180), 0, 180);
+    // Only update base target if not holding
+    if (!baseHold) {
+      float baseInput = values[5] - values[4];
+      targetBase = constrain(map(baseInput * 100, -100, 100, 0, 180), 0, 180);
+    }
+
     targetShoulder = constrain(map(-values[1] * 100, -100, 100, 0, 180), 0, 180);
     targetElbow = constrain(map(-values[3] * 100, -100, 100, 0, 180), 0, 180);
   }
 
   if (millis() - lastUpdate >= updateInterval) {
-    float step = baseStepSize * speedMultiplier;
+  float step = baseStepSize * speedMultiplier;
 
+  if (!(leftTriggerHeld && rightTriggerHeld)) {
     currentBase = moveToward(currentBase, targetBase, step);
-    currentShoulder = moveToward(currentShoulder, targetShoulder, step);
-    currentElbow = moveToward(currentElbow, targetElbow, step);
-
     baseServo.write(currentBase);
-    shoulderServo.write(currentShoulder);
-    elbowServo.write(currentElbow);
-
-    lastUpdate = millis();
   }
+
+  currentShoulder = moveToward(currentShoulder, targetShoulder, step);
+  currentElbow = moveToward(currentElbow, targetElbow, step);
+
+  shoulderServo.write(currentShoulder);
+  elbowServo.write(currentElbow);
+
+  lastUpdate = millis();
+}
+
 }
 
 
